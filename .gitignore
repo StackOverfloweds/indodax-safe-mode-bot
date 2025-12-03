@@ -1,0 +1,48 @@
+File yang dihasilkan oleh Go
+
+Binary executable utama (nama disesuaikan dengan nama folder proyek)
+
+safe-mode
+
+Atau gunakan wildcard untuk binary agar fleksibel
+
+*.exe
+
+Cache, dependencies, dan build
+
+/vendor/
+/pkg/
+/bin/
+
+File konfigurasi sensitif
+
+JANGAN pernah melakukan commit kredensial API
+
+.env
+
+File data lokal yang dihasilkan saat bot berjalan
+
+File ini menyimpan status posisi terakhir dan harus diabaikan.
+
+Contoh: position_btc_idr.csv
+
+*.csv
+
+File hasil kompilasi modul Go
+
+go.mod
+go.sum
+
+Kami tetap menyertakan go.mod dan go.sum karena ini adalah project Go.
+
+Namun, beberapa tim memilih untuk mengabaikan go.sum jika mereka menggunakan vendoring.
+
+Berdasarkan output 'ls', Anda masih memiliki go.mod dan go.sum.
+
+Folder data lokal (jika digunakan untuk menyimpan log atau DB)
+
+/data/
+
+Log file
+
+*.log

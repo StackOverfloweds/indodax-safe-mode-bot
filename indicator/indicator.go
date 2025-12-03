@@ -146,3 +146,62 @@ func TrendAnalysis(last, emaFast, emaSlow, rsi, macd, signal, hist float64) stri
 	text += fmt.Sprintf("%s | MACD: %.6f SIG: %.6f HIST: %.6f | RSI: %.1f%s", ColorCyan, macd, signal, hist, rsi, ColorReset)
 	return text
 }
+
+// StandardDeviation menghitung standard deviation dari array float64
+func StandardDeviation(prices []float64) float64 {
+	n := len(prices)
+	if n <= 1 {
+		return 0.0
+	}
+
+	// Hitung rata-rata (mean)
+	sum := 0.0
+	for _, price := range prices {
+		sum += price
+	}
+	mean := sum / float64(n)
+
+	// Hitung varians
+	variance := 0.0
+	for _, price := range prices {
+		variance += math.Pow(price-mean, 2)
+	}
+	variance /= float64(n)
+
+	// Standard deviation adalah akar kuadrat dari varians
+	return math.Sqrt(variance)
+}
+
+// CalculateRSI menghitung Relative Strength Index (RSI)
+func CalculateRSI(period int, prices []float64) float64 {
+	n := len(prices)
+	if n < period {
+		// Tidak cukup data, kembalikan nilai tengah
+		return 50
+	}
+
+	// Pastikan kita hanya menggunakan periode yang cukup (misal 14 hari)
+	if n > period {
+		prices = prices[n-period-1:] // Ambil [period+1] data untuk [period] perubahan
+		n = len(prices)
+	}
+
+	gains := 0.0
+	losses := 0.0
+	for i := 1; i < n; i++ {
+		d := prices[i] - prices[i-1]
+		if d > 0 {
+			gains += d
+		} else {
+			losses -= d
+		}
+	}
+	avgGain := gains / float64(period)
+	avgLoss := losses / float64(period)
+	if avgLoss == 0 {
+		return 100
+	}
+	rs := avgGain / avgLoss
+	rsi := 100 - (100 / (1 + rs))
+	return math.Max(0, math.Min(100, rsi))
+}

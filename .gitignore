@@ -46,3 +46,5 @@ Folder data lokal (jika digunakan untuk menyimpan log atau DB)
 Log file
 
 *.log
+
+venv/

@@ -1,70 +1,91 @@
 package main
 
 import (
+	"context"
 	"log"
 	"os"
 	"os/signal"
+	"strings"
 	"sync"
+	"syscall"
 	"time"
 
 	"safe-mode/config"
 	"safe-mode/monitor"
 	"safe-mode/ordermanager"
 	"safe-mode/service/account"
+	"safe-mode/service/dl"
 	"safe-mode/service/indodax"
 	"safe-mode/service/market"
 )
 
 func main() {
-	// rapiin log
+	// Merapikan format log sesuai permintaan user
 	log.SetFlags(log.Ldate | log.Ltime)
+	log.Println("Starting Safe-Mode DL Trading Bot...")
 
+	// 1. Muat Konfigurasi
 	cfg := config.Load()
 
-	// Core service (Indodax)
+	// 2. Inisialisasi Layanan Dasar (Dependency Injection)
 	indodaxSvc := indodax.NewService(cfg)
-
-	// tg := telegram.NewClient(cfg.TelegramBotToken, cfg.TelegramChatID)
-
-	// Sub services
 	marketSvc := market.NewService(indodaxSvc)
 	accountSvc := account.NewService(indodaxSvc)
-
-	// Order manager needs account + market + core
+	dlSvc := dl.NewService(cfg)
 	om := ordermanager.NewService(accountSvc, marketSvc, indodaxSvc)
 
-	// Monitor config (sesuaikan modal / pair / delay)
-	monCfg := &monitor.Config{
-		Pair:      "btc_idr",
-		TPPercent: 7.0,
-		SLPercent: 4.0,
-		PollDelay: 5 * time.Second,
+	// 3. Konteks untuk Shutdown Graceful (Dideklarasikan SEKALI)
+	ctx, cancel := context.WithCancel(context.Background())
+	var wg sync.WaitGroup
 
-		// === Split Order Mode (Auto Modal) ===
-		UseSplitOrder: true, // aktifkan modal split
-		SplitA:        60,   // 60%
-		SplitB:        40,   // 40%
+	// Menangani sinyal OS (Ctrl+C atau SIGTERM)
+	signalCh := make(chan os.Signal, 1)
+	signal.Notify(signalCh, syscall.SIGINT, syscall.SIGTERM)
 
-		// ModalIDR tidak perlu diisi → otomatis mengambil saldo IDR wallet
-		ModalIDR: 0,
+	// 4. Proses Setiap Trading Pair dan Jalankan Monitor
+	pairs := strings.Split(cfg.TradingPairs, ",")
+
+	if len(pairs) == 0 || (len(pairs) == 1 && strings.TrimSpace(pairs[0]) == "") {
+		log.Fatal("❌ Konfigurasi TradingPairs kosong. Mohon atur variabel lingkungan TRADING_PAIRS.")
 	}
 
-	// Create monitor instance
-	mon := monitor.New(accountSvc, marketSvc, om, monCfg)
+	for _, p := range pairs {
+		pair := strings.TrimSpace(p)
+		if pair == "" {
+			continue
+		}
 
-	var wg sync.WaitGroup
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
-		mon.Start()
-	}()
+		log.Printf("🚀 Memulai Monitor untuk Pair: %s", strings.ToUpper(pair))
 
-	// === Shutdown handler (CTRL+C) ===
-	c := make(chan os.Signal, 1)
-	signal.Notify(c, os.Interrupt)
+		// Buat konfigurasi Monitor spesifik untuk pair ini
+		monitorCfg := &monitor.Config{
+			Pair:                  pair,
+			PollDelay:             time.Duration(cfg.PollDelaySeconds) * time.Second,
+			BuyCooldown:           time.Duration(cfg.BuyCooldownSeconds) * time.Second,
+			SellCooldown:          time.Duration(cfg.SellCooldownSeconds) * time.Second,
+			DLConfidenceThreshold: cfg.DLConfidenceThreshold,
+			UseSplitOrder:         cfg.UseSplitOrder,
+			SplitA:                cfg.SplitA,
+			SplitB:                cfg.SplitB,
+			ModalIDR:              cfg.ModalIDR,
+			MinModal:              cfg.MinModal,
+		}
 
-	<-c
-	log.Println("⛔ CTRL+C detected. Exiting immediately...")
-	os.Exit(0)
+		// Inisialisasi Trading Monitor dengan Service yang sudah di-inject
+		mon := monitor.NewMonitor(accountSvc, marketSvc, om, dlSvc, monitorCfg)
 
+		// Mulai Monitor di Goroutine
+		wg.Add(1)
+		go mon.Start(ctx, &wg)
+	}
+
+	// 5. Menunggu Sinyal Shutdown
+	<-signalCh
+	log.Println("\n👋 Sinyal Interrupt diterima. Memulai Shutdown...")
+
+	// 6. Melakukan Shutdown Graceful
+	cancel()  // Beri tahu semua goroutine untuk berhenti
+	wg.Wait() // Tunggu hingga semua goroutine selesai
+
+	log.Println("✅ Shutdown Selesai. Bot berhenti.")
 }

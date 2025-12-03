@@ -29,7 +29,7 @@ Pastikan Anda telah menginstal **Go (Golang)** versi 1.18 ke atas.
 ### 2. Clone Repositori
 
 ```
-git clone <URL_REPOSITORI_ANDA>
+git clone https://github.com/StackOverfloweds/indodax-safe-mode-bot.git
 cd safe-mode
 ```
 
